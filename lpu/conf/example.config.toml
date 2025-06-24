@@ -1,0 +1,28 @@
+[lpu]
+id = "xyz"
+name = "PT xyz"
+timezone = "gmt+8"
+app_mode = "development"
+
+[network]
+tailscale_ip = "185.111.159.233"
+mqtt_broker = "mqtt.cpnz.net"
+mqtt_port = 1883
+mqtt_user = "loki"
+mqtt_pswd = "password"
+
+[ais]
+ip = "154.26.133.119"
+port = 5006
+
+[lite]
+port = 9191
+center_latlon = "-6.101554, 106.849254"  # Default to Jakarta Bay, change this
+
+[cameras]
+[cameras.static1]
+rtsp_url = "rtsp://admin:Amtek2024@10.0.0.64:554/Streaming/channels/101"
+segment = 30  # Second
+retain_for = 1209600  # 1209600 second for 14 days or 31557600 second for 1 year
+retain_interval = 86400  # Second
+record_dir = "/lpu/recordings"

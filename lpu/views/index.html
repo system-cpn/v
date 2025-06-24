@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block head %}
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        .container.is-fluid {
+            padding: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="container is-fluid" x-data="cakrawalaApp()">
+
+        <!-- Live Streams Section -->
+        <section class="section">
+            <div class="container">
+                <h2 class="title is-4">
+                    <i class="fas fa-broadcast-tower"></i> Live Streams
+                </h2>
+                <div class="columns is-multiline">
+                    <template x-for="camera in cameras" :key="camera">
+                        <div :class="getCameraColumnClass()">
+                            <div class="live-stream">
+                                <video :id="`video-${camera}`" autoplay muted playsinline x-ref="video"></video>
+                                <div class="stream-controls">
+                                    <div class="stream-controls-left">
+                                        <button class="stream-btn" @click="togglePlay(camera)">
+                                            <i :class="getPlayIcon(camera)"></i>
+                                        </button>
+                                        <button class="stream-btn" @click="toggleFullscreen(camera)">
+                                            <i class="fas fa-expand"></i>
+                                        </button>
+                                    </div>
+                                    <div class="camera-label">
+                                        <span x-text="camera.charAt(0).toUpperCase() + camera.slice(1)"></span>
+                                        <div class="camera-status online"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recordings and Calendar Section -->
+        <section class="section">
+            <div class="container">
+                <div class="columns">
+                    <!-- Recordings Column -->
+                    <div class="column is-8">
+                        <div class="card">
+                            <div class="card-content">
+                                <h2 class="title is-4">
+                                    <i class="fas fa-film"></i> Recordings 
+                                    <span class="tag is-info" x-text="formattedSelectedDate"></span>
+                                </h2>
+                                <div class="recordings-container">
+                                    <div x-show="!hasRecordings" class="no-recordings">
+                                        <i class="fas fa-video-slash" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                                        <p>No recordings found for this date.</p>
+                                    </div>
+                                    
+                                    <template x-for="[cameraName, hours] in Object.entries(recordings)" :key="cameraName">
+                                        <div class="mb-6" x-show="Object.keys(hours).length > 0">
+                                            <h4 class="title is-5" style="color: var(--text-color); border-bottom: 2px solid var(--intent-primary); padding-bottom: 0.5rem;">
+                                                <i class="fas fa-camera" style="color: var(--intent-primary);"></i> 
+                                                <span x-text="cameraName.toUpperCase()"></span>
+                                            </h4>
+
+                                            <template x-for="[hour, hourRecordings] in Object.entries(hours)" :key="hour">
+                                                <div class="hour-section mb-4">
+                                                    <h5 class="title is-6 mb-3">
+                                                        <i class="fas fa-clock" style="color: var(--intent-success);"></i> 
+                                                        <span style="color: var(--text-color);" x-text="`${hour}:00 - ${hour}:59`"></span>
+                                                        <span class="tag" style="background: var(--intent-success); color: white; margin-left: 0.5rem;" x-text="`${hourRecordings.length} files`"></span>
+                                                    </h5>
+
+                                                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                                                        <template x-for="(recording, index) in hourRecordings" :key="recording.filename">
+                                                            <div class="recording-item" @click="playRecording(cameraName, hour, index)">
+                                                                <div class="recording-info">
+                                                                    <div style="color: var(--text-color); font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem;">
+                                                                        <i class="fas fa-play-circle" style="color: var(--intent-primary); margin-right: 0.5rem;"></i>
+                                                                        <span x-text="recording.timestamp.split('_')[1].replace(/-/g, ':')"></span>
+                                                                    </div>
+                                                                    <div style="color: var(--text-muted); font-size: 0.8rem;">
+                                                                        <div style="margin-bottom: 0.25rem;">
+                                                                            <i class="fas fa-file-video" style="color: var(--intent-warning); margin-right: 0.25rem;"></i>
+                                                                            <span x-text="recording.filename"></span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <i class="fas fa-hdd" style="color: var(--text-disabled); margin-right: 0.25rem;"></i>
+                                                                            <span x-text="`${(recording.size / (1024 * 1024)).toFixed(1)} MB`"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Column -->
+                    <div class="column is-4">
+                        <div class="calendar-container">
+                            <h2 class="title is-4">
+                                <i class="fas fa-calendar-alt"></i> Calendar
+                            </h2>
+                            <div>
+                                <div class="calendar-header">
+                                    <button class="calendar-nav-btn" @click="previousMonth()">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </button>
+                                    <h3 class="title is-6" style="margin: 0; color: var(--text-color);" x-text="`${monthNames[currentMonth]} ${currentYear}`"></h3>
+                                    <button class="calendar-nav-btn" @click="nextMonth()">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+
+                                <div class="week-header">
+                                    <template x-for="day in daysOfWeek" :key="day">
+                                        <div class="week-day" x-text="day"></div>
+                                    </template>
+                                </div>
+
+                                <div class="calendar-grid">
+                                    <template x-for="day in calendarDays" :key="day.key">
+                                        <div x-show="day.day" 
+                                             class="calendar-day" 
+                                             :class="day.classes"
+                                             @click="selectDate(day.dateStr)"
+                                             x-text="day.day">
+                                        </div>
+                                        <div x-show="!day.day"></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Video Player Modal -->
+        <div class="modal" :class="{ 'is-active': showVideoModal }">
+            <div class="modal-background" @click="closeVideoModal()"></div>
+            <div class="modal-card">
+                <header class="modal-card-head">
+                    <p class="modal-card-title" x-text="modalTitle">Video Player</p>
+                    <button class="delete has-background-danger" @click="closeVideoModal()"></button>
+                </header>
+                <section class="modal-card-body">
+                    <div class="modal-video-container">
+                        <video x-ref="modalVideo" controls></video>
+                    </div>
+                    <div class="modal-controls">
+                        <button class="button is-primary" @click="playPrevious()" :disabled="currentVideoIndex === 0">
+                            <span class="icon"><i class="fas fa-backward"></i></span>
+                            <span>Previous</span>
+                        </button>
+                        <button class="button is-primary" @click="downloadCurrentVideo()">
+                            <span class="icon"><i class="fas fa-download"></i></span>
+                            <span>Download</span>
+                        </button>
+                        <button class="button is-primary" @click="playNext()" :disabled="currentVideoIndex >= currentPlaylist.length - 1">
+                            <span class="icon"><i class="fas fa-forward"></i></span>
+                            <span>Next</span>
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        // Set initial data for Alpine.js
+        window.cameras = {{ cameras|tojson }};
+        window.recordings = {{ recordings|tojson }};
+        window.selectedDate = '{{ selected_date }}';
+    </script>
+    <script type="module" src="/static/video-rtc.js"></script>
+    <script src="/static/lite.js"></script>
+{% endblock %}

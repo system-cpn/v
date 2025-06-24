@@ -1,0 +1,14 @@
+[Unit]
+Description=LPU FRPC
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/cpn/lpu/bin/frpc -c /cpn/lpu/conf/frpc.toml
+WorkingDirectory=/cpn/lpu/bin
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

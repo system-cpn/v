@@ -1,0 +1,26 @@
+[project]
+name = "lpu"
+version = "0.1.0"
+description = "Local Processing Unit"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.12.13",
+    "fastapi>=0.115.13",
+    "flask>=3.1.1",
+    "jinja2>=3.1.6",
+    "pyyaml>=6.0.2",
+    "uvicorn>=0.34.3",
+    "websockets>=15.0.1",
+    "pytest>=8.0.0",
+    "requests>=2.31.0",
+    "pyais>=2.9.4",
+    "paho-mqtt>=2.1.0",
+    "pysqlite3-binary>=0.5.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.0",
+]

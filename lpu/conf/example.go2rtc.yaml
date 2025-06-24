@@ -1,0 +1,10 @@
+rtsp:
+  listen: 0.0.0.0:9554
+webrtc:
+  listen: 0.0.0.0:9855
+api:
+  listen: 127.0.0.1:1984
+  origin: '*'
+streams:
+  static1:
+    - rtsp://admin:Amtek2024@10.0.0.64:554/Streaming/channels/101

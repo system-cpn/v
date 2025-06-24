@@ -1,0 +1,647 @@
+{% extends "base.html" %}
+
+{% block title %}Cakrawala Lite - AIS Tracking{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css">
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        #map-container {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            width: 100vw;
+            height: calc(100vh - 70px);
+            z-index: 1;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #2c3e50;
+        }
+        
+        .maplibregl-popup-content {
+            background: #2c3e50;
+            border: 1px solid #34495e;
+            border-radius: 8px;
+            padding: 16px;
+            color: #ecf0f1;
+            font-size: 13px;
+            max-width: 280px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        
+        .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+            border-right-color: #2c3e50;
+        }
+        
+        .ais-tooltip h4 {
+            color: #3498db;
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .ais-tooltip .field {
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .ais-tooltip .label {
+            color: #95a5a6;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        
+        .ais-tooltip .value {
+            color: #ecf0f1;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .vessel-triangle {
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 24px solid #FFB366;
+            cursor: pointer;
+        }
+        
+        .vessel-triangle.fishing {
+            border-bottom-color: #3DCC91;
+        }
+        
+        .vessel-triangle.cargo {
+            border-bottom-color: #FFB366;
+        }
+        
+        .vessel-triangle.tanker {
+            border-bottom-color: #FF6E6E;
+        }
+        
+        .vessel-triangle.passenger {
+            border-bottom-color: #9B59B6;
+        }
+        
+        .vessel-trail {
+            stroke: rgba(72, 175, 240, 0.3);
+            stroke-width: 2;
+            fill: none;
+        }
+        
+        .status-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(52, 73, 94, 0.9);
+            border: 1px solid #34495e;
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: #ecf0f1;
+            font-size: 14px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .vessel-count {
+            color: #3498db;
+            font-weight: 600;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <!-- Full Screen Map -->
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+    
+    <!-- Status Indicator -->
+    <div class="status-indicator">
+        <i class="fas fa-ship"></i> 
+        <span class="vessel-count" id="vessel-count">0</span> vessels tracked
+    </div>
+{% endblock %}
+
+{% block scripts %}
+
+    <script>
+        class AISMap {
+            constructor() {
+                this.map = null;
+                this.vessels = {};
+                this.markers = {};
+                this.trails = {}; // Vessel trails
+                this.websocket = null;
+                this.reconnectInterval = null;
+                this.config = {{ config|tojson }};
+                
+                this.init();
+            }
+            
+            init() {
+                this.initMap();
+                this.connectWebSocket();
+            }
+            
+            initMap() {
+                console.log('Initializing map...');
+                
+                try {
+                    // Initialize MapLibre GL map with OpenStreetMap style
+                    this.map = new maplibregl.Map({
+                        container: 'map',
+                        style: {
+                            version: 8,
+                            sources: {
+                                'osm': {
+                                    type: 'raster',
+                                    tiles: [
+                                        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                                    ],
+                                    tileSize: 256
+                                }
+                            },
+                            layers: [
+                                {
+                                    id: 'osm',
+                                    type: 'raster',
+                                    source: 'osm'
+                                }
+                            ]
+                        },
+                        center: this.getMapCenter(),
+                        zoom: 8
+                    });
+                    
+                    this.map.on('load', () => {
+                        console.log('Map loaded successfully');
+                    });
+                    
+                    
+                    this.map.on('error', (e) => {
+                        console.error('Map error:', e);
+                    });
+                    
+                    console.log('Map initialization completed');
+                } catch (error) {
+                    console.error('Failed to initialize map:', error);
+                }
+            }
+
+            getMapCenter() {
+                // Parse center_latlon from lite config
+                const liteConfig = this.config.lite || {};
+                const centerLatLon = liteConfig.center_latlon;
+
+                if (centerLatLon) {
+                    const [lat, lon] = centerLatLon.split(',').map(s => parseFloat(s.trim()));
+                    return [lon, lat]; // MapLibre uses [lon, lat] format
+                }
+
+                // Default to Jakarta
+                return [106.845599, -6.208763];
+            }
+            
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/ais`;
+                
+                console.log('Connecting to WebSocket:', wsUrl);
+                
+                this.websocket = new WebSocket(wsUrl);
+                
+                this.websocket.onopen = () => {
+                    console.log('WebSocket connected');
+                    if (this.reconnectInterval) {
+                        clearInterval(this.reconnectInterval);
+                        this.reconnectInterval = null;
+                    }
+                };
+                
+                this.websocket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        this.handleWebSocketMessage(message);
+                    } catch (error) {
+                        console.error('Failed to parse WebSocket message:', error);
+                    }
+                };
+                
+                this.websocket.onclose = () => {
+                    console.log('WebSocket disconnected, attempting to reconnect...');
+                    this.websocket = null;
+                    
+                    // Reconnect after 5 seconds
+                    if (!this.reconnectInterval) {
+                        this.reconnectInterval = setInterval(() => {
+                            this.connectWebSocket();
+                        }, 5000);
+                    }
+                };
+                
+                this.websocket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+                
+                // Send ping every 30 seconds to keep connection alive
+                setInterval(() => {
+                    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                        this.websocket.send(JSON.stringify({type: 'ping'}));
+                    }
+                }, 30000);
+            }
+            
+            handleWebSocketMessage(message) {
+                switch (message.type) {
+                    case 'initial_data':
+                        console.log('Received initial vessel data:', Object.keys(message.data).length, 'vessels');
+                        this.updateVessels(message.data);
+                        this.updateVesselCount(Object.keys(message.data).length);
+                        break;
+                        
+                    case 'vessel_update':
+                        console.log('Received vessel update:', message.data.mmsi);
+                        this.updateSingleVessel(message.data);
+                        break;
+                        
+                    case 'pong':
+                        // Keep-alive response
+                        break;
+                        
+                    default:
+                        console.log('Unknown message type:', message.type);
+                }
+            }
+            
+            updateVessels(vessels) {
+                // Remove old markers for vessels no longer present
+                Object.keys(this.markers).forEach(mmsi => {
+                    if (!vessels[mmsi]) {
+                        this.removeVessel(mmsi);
+                    }
+                });
+                
+                // Add/update vessel markers
+                Object.values(vessels).forEach(vessel => {
+                    if (vessel.latitude && vessel.longitude) {
+                        this.updateVesselMarker(vessel);
+                    }
+                });
+                
+                this.vessels = vessels;
+            }
+            
+            updateSingleVessel(vessel) {
+                if (vessel.latitude && vessel.longitude) {
+                    this.updateVesselMarker(vessel);
+                    this.vessels[vessel.mmsi] = vessel;
+                    this.updateVesselCount(Object.keys(this.vessels).length);
+                }
+            }
+            
+            removeVessel(mmsi) {
+                if (this.markers[mmsi]) {
+                    this.markers[mmsi].remove();
+                    delete this.markers[mmsi];
+                }
+                
+                if (this.trails[mmsi]) {
+                    this.map.removeLayer(`trail-${mmsi}`);
+                    this.map.removeSource(`trail-${mmsi}`);
+                    delete this.trails[mmsi];
+                }
+                
+                delete this.vessels[mmsi];
+            }
+            
+            updateVesselMarker(vessel) {
+                const mmsi = vessel.mmsi;
+                const newPosition = [vessel.longitude, vessel.latitude];
+                
+                if (this.markers[mmsi]) {
+                    // Get current position for animation check
+                    const currentLngLat = this.markers[mmsi].getLngLat();
+                    const currentPosition = [currentLngLat.lng, currentLngLat.lat];
+                    
+                    // Check if position has changed significantly (more than ~1 meter)
+                    const latDiff = Math.abs(newPosition[1] - currentPosition[1]);
+                    const lngDiff = Math.abs(newPosition[0] - currentPosition[0]);
+                    const hasMovedSignificantly = latDiff > 0.00001 || lngDiff > 0.00001;
+                    
+                    if (hasMovedSignificantly) {
+                        // Animate vessel movement using JavaScript animation
+                        this.animateVesselMovement(mmsi, currentPosition, newPosition);
+                        
+                        console.log(`Vessel ${mmsi} moving from [${currentPosition[1].toFixed(6)}, ${currentPosition[0].toFixed(6)}] to [${newPosition[1].toFixed(6)}, ${newPosition[0].toFixed(6)}]`);
+                    } else {
+                        // No significant movement, just update position
+                        this.markers[mmsi].setLngLat(newPosition);
+                    }
+                    
+                    // Update rotation based on heading or course
+                    const rotation = vessel.heading !== undefined && vessel.heading !== 511 ? vessel.heading : (vessel.course || 0);
+                    this.markers[mmsi].setRotation(rotation);
+                    
+                    // Update trail
+                    this.updateVesselTrail(vessel);
+                } else {
+                    // Create new marker
+                    const markerElement = this.createVesselMarker(vessel);
+                    
+                    const rotation = vessel.heading !== undefined && vessel.heading !== 511 ? vessel.heading : (vessel.course || 0);
+                    const marker = new maplibregl.Marker({
+                        element: markerElement,
+                        rotation: rotation
+                    })
+                    .setLngLat(newPosition)
+                    .addTo(this.map);
+                    
+                    this.markers[mmsi] = marker;
+                    
+                    console.log(`New vessel ${mmsi} added at [${newPosition[1].toFixed(6)}, ${newPosition[0].toFixed(6)}]`);
+                    
+                    // Initialize trail
+                    this.createVesselTrail(vessel);
+                }
+            }
+            
+            animateVesselMovement(mmsi, fromPosition, toPosition) {
+                if (!this.markers[mmsi]) return;
+                
+                const duration = 2000; // 2 seconds
+                const startTime = performance.now();
+                
+                const animate = (currentTime) => {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    // Easing function (ease-out)
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    
+                    // Interpolate position
+                    const currentLng = fromPosition[0] + (toPosition[0] - fromPosition[0]) * easeOut;
+                    const currentLat = fromPosition[1] + (toPosition[1] - fromPosition[1]) * easeOut;
+                    
+                    // Update marker position
+                    if (this.markers[mmsi]) {
+                        this.markers[mmsi].setLngLat([currentLng, currentLat]);
+                    }
+                    
+                    // Continue animation if not finished
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    }
+                };
+                
+                requestAnimationFrame(animate);
+            }
+            
+            createVesselMarker(vessel) {
+                const markerElement = document.createElement('div');
+                
+                // Add OpenCPN-style classes based on vessel type
+                const vesselClass = this.getVesselClass(vessel);
+                markerElement.className = `vessel-triangle ${vesselClass}`;
+                markerElement.style.cursor = 'pointer';
+                
+                // Store vessel reference for updates
+                markerElement._vessel = vessel;
+                
+                // Add hover events for tooltip
+                markerElement.addEventListener('mouseenter', (e) => {
+                    this.showVesselTooltip(vessel, [vessel.longitude, vessel.latitude]);
+                });
+                
+                markerElement.addEventListener('mouseleave', () => {
+                    this.hideVesselTooltip();
+                });
+                
+                return markerElement;
+            }
+            
+            getVesselClass(vessel) {
+                if (!vessel.ship_type) return '';
+                
+                if (vessel.ship_type >= 30 && vessel.ship_type <= 32) return 'fishing';
+                if (vessel.ship_type >= 70 && vessel.ship_type <= 79) return 'cargo';
+                if (vessel.ship_type >= 80 && vessel.ship_type <= 89) return 'tanker';
+                if (vessel.ship_type >= 60 && vessel.ship_type <= 69) return 'passenger';
+                
+                return '';
+            }
+            
+            createVesselTrail(vessel) {
+                if (!vessel.position_history || vessel.position_history.length < 2) return;
+                
+                const mmsi = vessel.mmsi;
+                const coordinates = vessel.position_history.map(pos => [pos.lon, pos.lat]);
+                
+                // Add trail source and layer
+                this.map.addSource(`trail-${mmsi}`, {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        properties: {},
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: coordinates
+                        }
+                    }
+                });
+                
+                this.map.addLayer({
+                    id: `trail-${mmsi}`,
+                    type: 'line',
+                    source: `trail-${mmsi}`,
+                    layout: {
+                        'line-join': 'round',
+                        'line-cap': 'round'
+                    },
+                    paint: {
+                        'line-color': '#48AFF0',
+                        'line-width': 2,
+                        'line-opacity': 0.3
+                    }
+                });
+                
+                this.trails[mmsi] = true;
+            }
+            
+            updateVesselTrail(vessel) {
+                if (!vessel.position_history || vessel.position_history.length < 2) return;
+                
+                const mmsi = vessel.mmsi;
+                if (!this.trails[mmsi]) {
+                    this.createVesselTrail(vessel);
+                    return;
+                }
+                
+                const coordinates = vessel.position_history.map(pos => [pos.lon, pos.lat]);
+                
+                // Update trail coordinates
+                this.map.getSource(`trail-${mmsi}`).setData({
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: coordinates
+                    }
+                });
+            }
+            
+            showVesselTooltip(vessel, position) {
+                if (this.currentPopup) {
+                    this.currentPopup.remove();
+                }
+                
+                this.currentPopup = new maplibregl.Popup({
+                    closeButton: false,
+                    closeOnClick: false,
+                    className: 'ais-popup',
+                    anchor: 'left',
+                    offset: [10, 0]
+                })
+                .setLngLat(position)
+                .setHTML(this.createTooltip(vessel))
+                .addTo(this.map);
+            }
+            
+            hideVesselTooltip() {
+                if (this.currentPopup) {
+                    this.currentPopup.remove();
+                    this.currentPopup = null;
+                }
+            }
+            
+            createTooltip(vessel) {
+                const formatTimestamp = (timestamp, timezoneOffset) => {
+                    try {
+                        const date = new Date(timestamp);
+                        const localDate = new Date(date.getTime() + (timezoneOffset * 60 * 60 * 1000));
+                        const day = String(localDate.getDate()).padStart(2, '0');
+                        const month = String(localDate.getMonth() + 1).padStart(2, '0');
+                        const year = localDate.getFullYear();
+                        const hours = String(localDate.getHours()).padStart(2, '0');
+                        const minutes = String(localDate.getMinutes()).padStart(2, '0');
+                        return `${day}-${month}-${year} ${hours}:${minutes}`;
+                    } catch {
+                        return '-';
+                    }
+                };
+                
+                const formatValue = (value) => {
+                    if (value === undefined || value === null || value === '' || 
+                        (typeof value === 'string' && (value.toLowerCase().includes('unknown') || value.toLowerCase().includes('undefined')))) {
+                        return '-';
+                    }
+                    return value;
+                };
+                
+                let html = `<div class="ais-tooltip">`;
+                
+                // MMSI
+                html += `<div class="field"><span class="label">MMSI</span><span class="value">${vessel.mmsi || '-'}</span></div>`;
+                
+                // Ship name
+                const vesselName = vessel.shipname && vessel.shipname.trim() !== '' 
+                    ? vessel.shipname 
+                    : '-';
+                html += `<div class="field"><span class="label">Ship Name</span><span class="value">${vesselName}</span></div>`;
+                
+                // Ship type
+                html += `<div class="field"><span class="label">Ship Type</span><span class="value">${formatValue(vessel.ship_type_text)}</span></div>`;
+                
+                // Last position
+                const lat = vessel.latitude ? vessel.latitude.toFixed(6) : '-';
+                const lon = vessel.longitude ? vessel.longitude.toFixed(6) : '-';
+                html += `<div class="field"><span class="label">Last Position</span><span class="value">${lat}, ${lon}</span></div>`;
+                
+                // Course
+                const courseValue = (vessel.course !== undefined && vessel.course !== null) 
+                    ? `${vessel.course.toFixed(1)}°` 
+                    : '-';
+                html += `<div class="field"><span class="label">Course</span><span class="value">${courseValue}</span></div>`;
+                
+                // Heading
+                const headingValue = (vessel.heading !== undefined && vessel.heading !== null && vessel.heading !== 511) 
+                    ? `${vessel.heading}°` 
+                    : '-';
+                html += `<div class="field"><span class="label">Heading</span><span class="value">${headingValue}</span></div>`;
+                
+                // Speed
+                const speedValue = (vessel.speed !== undefined && vessel.speed !== null) 
+                    ? `${vessel.speed.toFixed(1)} knots` 
+                    : '-';
+                html += `<div class="field"><span class="label">Speed</span><span class="value">${speedValue}</span></div>`;
+                
+                // Status
+                html += `<div class="field"><span class="label">Status</span><span class="value">${formatValue(vessel.nav_status_text)}</span></div>`;
+                
+                // Last update
+                html += `<div class="field"><span class="label">Last Update</span><span class="value">${formatTimestamp(vessel.last_seen || vessel.timestamp, vessel.timezone_offset || 0)}</span></div>`;
+                
+                html += `</div>`;
+                
+                return html;
+            }
+            
+            updateVesselCount(count) {
+                const countElement = document.getElementById('vessel-count');
+                if (countElement) {
+                    countElement.textContent = count;
+                }
+            }
+            
+            startVesselUpdates() {
+                // Update vessels every 10 seconds
+                this.updateInterval = setInterval(() => {
+                    this.loadVessels();
+                }, 10000);
+            }
+            
+            destroy() {
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                }
+                
+                Object.values(this.markers).forEach(marker => {
+                    marker.remove();
+                });
+                
+                if (this.map) {
+                    this.map.remove();
+                }
+            }
+        }
+        
+        // Initialize AIS map when page loads
+        let aisMap;
+        document.addEventListener('DOMContentLoaded', () => {
+            aisMap = new AISMap();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (aisMap) {
+                aisMap.destroy();
+            }
+        });
+    </script>
+{% endblock %}

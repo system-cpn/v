@@ -1,0 +1,69 @@
+serverAddr = "185.111.159.233"
+serverPort = 7172
+auth.method = "token"
+auth.token = "password"
+loginFailExit = false
+
+[[proxies]]
+type = "tcpmux"
+name = "ssh"
+customDomains = ["xyz.sh.cpnz.net"]
+multiplexer = "httpconnect"
+localIP = "127.0.0.1"
+localPort = 22
+
+[[proxies]]  # Web admin AIS receiver
+type = "http"
+name = "web-ais"
+subdomain = "xyz-ais"
+localIP = "10.0.0.156"
+localPort = 80
+
+[[proxies]]  # Web admin wireless router
+type = "http"
+name = "web-router"
+subdomain = "xyz-router"
+localIP = "10.0.0.1"
+localPort = 80
+
+[[proxies]]  # Web admin static1
+type = "http"
+name = "web-static1"
+subdomain = "xyz-static1"
+localIP = "10.0.0.64"
+localPort = 80
+
+[[proxies]]  # go2rtc RTSP
+type = "tcp"
+name = "xyz-rtsp"
+remotePort = 60001
+localIP = "127.0.0.1"
+localPort = 9554
+
+[[proxies]]  # go2rtc WebRTC
+type = "tcp"
+name = "xyz-webrtc"
+remotePort = 60002
+localIP = "127.0.0.1"
+localPort = 9855
+
+[[proxies]]  # go2rtc API
+type = "tcp"
+name = "xyz-api"
+remotePort = 60003
+localIP = "127.0.0.1"
+localPort = 1984
+
+# [[proxies]]  # Web admin for second CCTV, if any third or more copy paste this
+# type = "http"
+# name = "web-ptz1"
+# subdomain = "xyz-ptz1"
+# localIP = "10.0.0.64"
+# localPort = 80
+
+# [[proxies]]  # Web admin PTP (point-to-point), if any
+# type = "http"
+# name = "web-ptp"
+# subdomain = "xyz-ptp"
+# localIP = "10.0.0.200"
+# localPort = 80

@@ -1,0 +1,14 @@
+[Unit]
+Description=LPU Core
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/cpn/lpu/.local/bin/uv run lpu.py
+WorkingDirectory=/cpn/lpu
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

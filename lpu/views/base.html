@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Cakrawala Lite{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/lite.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block navbar %}
+    <!-- Overlay Header -->
+    <div class="header-overlay">
+        <div class="header-content">
+            <h1 class="header-title">Cakrawala Lite</h1>
+            <nav class="header-nav">
+                <div class="buttons">
+                    <a class="button is-primary {% if request.url.path == '/' %}is-active{% endif %}" href="/">
+                        <span class="icon">
+                            <i class="fas fa-video"></i>
+                        </span>
+                        <span>CCTV</span>
+                    </a>
+                    <a class="button is-primary {% if request.url.path == '/ais' %}is-active{% endif %}" href="/ais">
+                        <span class="icon">
+                            <i class="fas fa-ship"></i>
+                        </span>
+                        <span>AIS</span>
+                    </a>
+                </div>
+            </nav>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block content %}{% endblock %}
+
+    {% block scripts %}{% endblock %}
+
+    <style>
+        .header-overlay {
+            background: rgba(52, 73, 94, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 24px;
+        }
+        
+        .header-title {
+            color: #3498db;
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .header-nav .buttons {
+            margin: 0;
+        }
+        
+        .header-nav .button {
+            margin-left: 8px;
+        }
+    </style>
+</body>
+</html>
