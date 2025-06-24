@@ -394,7 +394,7 @@ async def go2rtc_worker():
                 await asyncio.sleep(30)  # Check every 30 seconds
                 continue
             
-            cmd = ['./bin/go2rtc', '-config', './conf/go2rtc.yaml']
+            cmd = ['go2rtc', '-config', './conf/go2rtc.yaml']
             logging.info("Starting go2rtc process")
             
             success = await run_subprocess(cmd, "go2rtc")
@@ -708,7 +708,7 @@ async def broadcast_vessel_update(vessel_data):
 
 async def update_vessel_database(vessel_data):
     """Update vessel database and broadcast updates"""
-    global ais_vessels, websocket_connections
+    global ais_vessels, websocket_connections, mqtt_client
     
     if not vessel_data or 'mmsi' not in vessel_data:
         return
@@ -729,6 +729,20 @@ async def update_vessel_database(vessel_data):
     # Broadcast to WebSocket connections
     if websocket_connections:
         await broadcast_vessel_update(ais_vessels[mmsi])
+    
+    # Publish to MQTT
+    if mqtt_client and mqtt_client.is_connected():
+        try:
+            config = get_config()
+            lpu_id = config.get('lpu', {}).get('id', 'unknown')
+            mqtt_payload = {
+                "id": lpu_id,
+                "msg": vessel_data.get('raw_message', '')
+            }
+            ais_json = json.dumps(mqtt_payload)
+            mqtt_client.publish("ais/raw", ais_json)
+        except Exception as e:
+            logging.error(f"Failed to publish AIS to MQTT: {e}")
 
 async def ais_tcp_worker(ais_config, lpu_config, network_config):
     """AIS TCP connection worker (async)"""

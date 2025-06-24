@@ -12,5 +12,6 @@
 /lpu/conf/frpc.toml
 /lpu/conf/go2rtc.yaml
 /lpu/bin/*
+/lpu/data.db
 
 !.gitkeep

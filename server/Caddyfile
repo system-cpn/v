@@ -1,0 +1,5 @@
+183.111.111.1 {
+	route /client1* {
+		reverse_proxy 127.0.0.1:6000
+	}
+}
