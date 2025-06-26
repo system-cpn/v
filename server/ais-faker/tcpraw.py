@@ -81,11 +81,13 @@ class TCPStreamer:
                 self.clients.discard(writer)
     
     async def run(self):
-        server_task = asyncio.create_task(self.start())
-        stream_task = asyncio.create_task(self.stream_data())
+        # Start server first
+        asyncio.create_task(self.start())
+        await asyncio.sleep(1)  # Give server time to start
         
+        # Then start streaming
         try:
-            await asyncio.gather(server_task, stream_task)
+            await self.stream_data()
         except KeyboardInterrupt:
             logging.info("Shutting down...")
         finally:
