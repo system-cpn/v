@@ -1,17 +1,17 @@
-# Python-generated files
-/lpu/__pycache__/
-/lpu/*.py[oc]
-/lpu/build/
-/lpu/dist/
-/lpu/wheels/
-/lpu/*.egg-info
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
 
-# Virtual environments
-/lpu/.venv/
 /lpu/conf/config.toml
 /lpu/conf/frpc.toml
 /lpu/conf/go2rtc.yaml
 /lpu/bin/*
 /lpu/data.db
+
+/server/ais-faker/vessel.csv
 
 !.gitkeep

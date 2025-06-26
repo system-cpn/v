@@ -35,7 +35,9 @@
             padding: 16px;
             color: #ecf0f1;
             font-size: 13px;
-            max-width: 280px;
+            max-width: 320px;
+            max-height: 600px;
+            overflow-y: auto;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
         
@@ -69,6 +71,20 @@
             color: #ecf0f1;
             font-weight: 600;
             font-size: 13px;
+        }
+        
+        .ais-tooltip .separator {
+            border-top: 1px solid #34495e;
+            margin: 12px 0 8px 0;
+        }
+        
+        .ais-tooltip .section-title {
+            color: #3498db;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin: 8px 0 6px 0;
         }
         
         .vessel-triangle {
@@ -554,10 +570,20 @@
                     return value;
                 };
                 
+                const formatDistance = (meters) => {
+                    if (!meters || meters === null || meters === undefined) return '-';
+                    if (meters < 1000) {
+                        return `${Math.round(meters)} m`;
+                    }
+                    return `${(meters / 1000).toFixed(1)} km`;
+                };
+                
                 let html = `<div class="ais-tooltip">`;
                 
-                // MMSI
-                html += `<div class="field"><span class="label">MMSI</span><span class="value">${vessel.mmsi || '-'}</span></div>`;
+                // === VESSEL IDENTIFICATION ===
+                // MMSI and AIS Class
+                const aisClass = formatValue(vessel.ais_class);
+                html += `<div class="field"><span class="label">MMSI (Class ${aisClass})</span><span class="value">${vessel.mmsi || '-'}</span></div>`;
                 
                 // Ship name
                 const vesselName = vessel.shipname && vessel.shipname.trim() !== '' 
@@ -568,31 +594,105 @@
                 // Ship type
                 html += `<div class="field"><span class="label">Ship Type</span><span class="value">${formatValue(vessel.ship_type_text)}</span></div>`;
                 
+                // IMO Number
+                if (vessel.imo_number && vessel.imo_number !== 0) {
+                    html += `<div class="field"><span class="label">IMO Number</span><span class="value">${vessel.imo_number}</span></div>`;
+                }
+                
+                // Callsign
+                if (vessel.callsign && vessel.callsign.trim() !== '') {
+                    html += `<div class="field"><span class="label">Call Sign</span><span class="value">${vessel.callsign}</span></div>`;
+                }
+                
+                // === POSITION & NAVIGATION ===
+                html += `<div class="separator"></div>`;
+                html += `<div class="section-title">Position & Navigation</div>`;
+                
                 // Last position
                 const lat = vessel.latitude ? vessel.latitude.toFixed(6) : '-';
                 const lon = vessel.longitude ? vessel.longitude.toFixed(6) : '-';
-                html += `<div class="field"><span class="label">Last Position</span><span class="value">${lat}, ${lon}</span></div>`;
+                html += `<div class="field"><span class="label">Position</span><span class="value">${lat}, ${lon}</span></div>`;
                 
-                // Course
+                // Range and Bearing (if available)
+                if (vessel.range_meters !== undefined && vessel.range_meters !== null) {
+                    const range = formatDistance(vessel.range_meters);
+                    const bearing = vessel.bearing_degrees !== undefined && vessel.bearing_degrees !== null 
+                        ? `${vessel.bearing_degrees.toFixed(1)}°` 
+                        : '-';
+                    html += `<div class="field"><span class="label">Range / Bearing</span><span class="value">${range} / ${bearing}</span></div>`;
+                }
+                
+                // Speed and Course
+                const speedValue = (vessel.speed !== undefined && vessel.speed !== null) 
+                    ? `${vessel.speed.toFixed(1)} kts` 
+                    : '-';
                 const courseValue = (vessel.course !== undefined && vessel.course !== null) 
                     ? `${vessel.course.toFixed(1)}°` 
                     : '-';
-                html += `<div class="field"><span class="label">Course</span><span class="value">${courseValue}</span></div>`;
+                html += `<div class="field"><span class="label">Speed / Course</span><span class="value">${speedValue} / ${courseValue}</span></div>`;
                 
-                // Heading
+                // Heading and Turn Rate
                 const headingValue = (vessel.heading !== undefined && vessel.heading !== null && vessel.heading !== 511) 
                     ? `${vessel.heading}°` 
                     : '-';
-                html += `<div class="field"><span class="label">Heading</span><span class="value">${headingValue}</span></div>`;
-                
-                // Speed
-                const speedValue = (vessel.speed !== undefined && vessel.speed !== null) 
-                    ? `${vessel.speed.toFixed(1)} knots` 
+                const turnRateValue = (vessel.turn_rate !== undefined && vessel.turn_rate !== null) 
+                    ? `${vessel.turn_rate.toFixed(1)}°/min` 
                     : '-';
-                html += `<div class="field"><span class="label">Speed</span><span class="value">${speedValue}</span></div>`;
+                html += `<div class="field"><span class="label">Heading / Turn Rate</span><span class="value">${headingValue} / ${turnRateValue}</span></div>`;
                 
-                // Status
+                // Navigation Status
                 html += `<div class="field"><span class="label">Status</span><span class="value">${formatValue(vessel.nav_status_text)}</span></div>`;
+                
+                // === VOYAGE DATA ===
+                if ((vessel.destination && vessel.destination.trim() !== '') || (vessel.eta_utc && vessel.eta_utc !== '')) {
+                    html += `<div class="separator"></div>`;
+                    html += `<div class="section-title">Voyage Data</div>`;
+                    
+                    // Destination
+                    if (vessel.destination && vessel.destination.trim() !== '') {
+                        html += `<div class="field"><span class="label">Destination</span><span class="value">${vessel.destination}</span></div>`;
+                    }
+                    
+                    // ETA
+                    if (vessel.eta_utc && vessel.eta_utc !== '') {
+                        try {
+                            const etaDate = new Date(vessel.eta_utc);
+                            const etaFormatted = `${String(etaDate.getDate()).padStart(2, '0')}-${String(etaDate.getMonth() + 1).padStart(2, '0')} ${String(etaDate.getHours()).padStart(2, '0')}:${String(etaDate.getMinutes()).padStart(2, '0')}`;
+                            html += `<div class="field"><span class="label">ETA (UTC)</span><span class="value">${etaFormatted}</span></div>`;
+                        } catch (e) {
+                            // Skip invalid ETA
+                        }
+                    }
+                }
+                
+                // === VESSEL CHARACTERISTICS ===
+                if ((vessel.length && vessel.length > 0) || (vessel.draught && vessel.draught > 0)) {
+                    html += `<div class="separator"></div>`;
+                    html += `<div class="section-title">Vessel Characteristics</div>`;
+                    
+                    // Vessel Dimensions
+                    if (vessel.length && vessel.length > 0) {
+                        const beam = vessel.beam && vessel.beam > 0 ? vessel.beam : '-';
+                        html += `<div class="field"><span class="label">Length x Beam</span><span class="value">${vessel.length}m x ${beam}m</span></div>`;
+                    }
+                    
+                    // Draught
+                    if (vessel.draught && vessel.draught > 0) {
+                        html += `<div class="field"><span class="label">Draught</span><span class="value">${vessel.draught.toFixed(1)}m</span></div>`;
+                    }
+                }
+                
+                // === TIMING INFORMATION ===
+                html += `<div class="separator"></div>`;
+                html += `<div class="section-title">Timing Information</div>`;
+                
+                // Report Age
+                if (vessel.report_age_seconds !== undefined && vessel.report_age_seconds !== null) {
+                    const ageText = vessel.report_age_seconds < 60 
+                        ? `${vessel.report_age_seconds}s ago`
+                        : `${Math.round(vessel.report_age_seconds / 60)}m ago`;
+                    html += `<div class="field"><span class="label">Report Age</span><span class="value">${ageText}</span></div>`;
+                }
                 
                 // Last update
                 html += `<div class="field"><span class="label">Last Update</span><span class="value">${formatTimestamp(vessel.last_seen || vessel.timestamp, vessel.timezone_offset || 0)}</span></div>`;
