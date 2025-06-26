@@ -15,15 +15,36 @@ if [ ! -f "$CSV_FILE" ]; then
     exit 1
 fi
 
-echo "Connecting to $IP_ADDRESS:$PORT and sending data from $CSV_FILE"
+echo "Starting TCP server on $IP_ADDRESS:$PORT serving data from $CSV_FILE"
 
-while IFS= read -r line; do
-    echo "$line" | nc "$IP_ADDRESS" "$PORT"
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to send data to $IP_ADDRESS:$PORT"
-        exit 1
-    fi
-    sleep 0.5
-done < "$CSV_FILE"
+# Function to handle client connections
+handle_client() {
+    local client_fd=$1
+    echo "Client connected"
+    
+    while true; do
+        while IFS= read -r line; do
+            echo "$line" >&${client_fd}
+            if [ $? -ne 0 ]; then
+                echo "Client disconnected"
+                return
+            fi
+            sleep 0.5
+        done < "$CSV_FILE"
+    done
+}
 
-echo "All data sent successfully"
+# Start TCP server using netcat
+while true; do
+    echo "Waiting for connections on $IP_ADDRESS:$PORT..."
+    nc -l -s "$IP_ADDRESS" -p "$PORT" -e /bin/bash -c "
+        echo 'Client connected to AIS data server'
+        while true; do
+            while IFS= read -r line; do
+                echo \"\$line\"
+                sleep 0.5
+            done < '$CSV_FILE'
+        done
+    "
+    echo "Client disconnected, waiting for new connection..."
+done
